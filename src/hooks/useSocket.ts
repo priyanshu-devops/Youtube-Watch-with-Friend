@@ -1,28 +1,59 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { io, Socket } from "socket.io-client";
 
-let socket: Socket;
+let socket: Socket | undefined;
+
+const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "::1"]);
+
+const resolveSocketUrl = () => {
+    if (process.env.NEXT_PUBLIC_SOCKET_URL) {
+        return process.env.NEXT_PUBLIC_SOCKET_URL;
+    }
+
+    if (typeof window !== "undefined") {
+        const { protocol, hostname, port } = window.location;
+
+        if (LOCAL_HOSTS.has(hostname)) {
+            const targetPort = process.env.NEXT_PUBLIC_SOCKET_PORT || "3001";
+            return `${protocol}//${hostname}:${targetPort}`;
+        }
+
+        const inferredPort =
+            process.env.NEXT_PUBLIC_SOCKET_PORT ||
+            port ||
+            (protocol === "https:" ? "443" : "80");
+
+        return `${protocol}//${hostname}${inferredPort ? `:${inferredPort}` : ""}`;
+    }
+
+    return "http://localhost:3001";
+};
 
 export const useSocket = () => {
     const [isConnected, setIsConnected] = useState(false);
     const [transport, setTransport] = useState("N/A");
     const [error, setError] = useState<string | null>(null);
 
+    const socketUrl = useMemo(() => resolveSocketUrl(), []);
+
     useEffect(() => {
         if (!socket) {
-            console.log("Initializing socket...");
-            socket = io("http://localhost:3001", {
-                transports: ["websocket", "polling"], // Try websocket first
+            console.log("Initializing socket...", socketUrl);
+            socket = io(socketUrl, {
+                transports: ["websocket", "polling"],
                 reconnectionAttempts: 5,
             });
         }
 
+        const activeSocket = socket;
+
         const onConnect = () => {
-            console.log("Socket connected!", socket.id);
+            if (!activeSocket) return;
+            console.log("Socket connected!", activeSocket.id);
             setIsConnected(true);
-            setTransport(socket.io.engine.transport.name);
+            setTransport(activeSocket.io.engine.transport.name);
             setError(null);
         };
 
@@ -36,24 +67,24 @@ export const useSocket = () => {
             setError(err.message);
         };
 
-        if (socket.connected) {
+        if (activeSocket.connected) {
             onConnect();
         }
 
-        socket.on("connect", onConnect);
-        socket.on("disconnect", onDisconnect);
-        socket.on("connect_error", onConnectError);
+        activeSocket.on("connect", onConnect);
+        activeSocket.on("disconnect", onDisconnect);
+        activeSocket.on("connect_error", onConnectError);
 
-        socket.io.engine.on("upgrade", (transport) => {
-            setTransport(transport.name);
+        activeSocket.io.engine.on("upgrade", (newTransport) => {
+            setTransport(newTransport.name);
         });
 
         return () => {
-            socket.off("connect", onConnect);
-            socket.off("disconnect", onDisconnect);
-            socket.off("connect_error", onConnectError);
+            activeSocket.off("connect", onConnect);
+            activeSocket.off("disconnect", onDisconnect);
+            activeSocket.off("connect_error", onConnectError);
         };
-    }, []);
+    }, [socketUrl]);
 
     return { socket, isConnected, transport, error };
 };

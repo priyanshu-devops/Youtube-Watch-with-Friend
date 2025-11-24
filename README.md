@@ -1,37 +1,40 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+## WatchParty – YouTube sync & chat
 
-## Getting Started
+This app lets friends watch any YouTube URL together with synchronized playback, chat and voice notes. It is built with Next.js (App Router), a custom Node/Socket.IO server, Tailwind and the YouTube IFrame API.
 
-First, run the development server:
+## Getting started (development)
 
 ```bash
+npm install
+
+# start Next.js on :3000 and the Socket.IO server on :3001
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Visit `http://localhost:3000`, create a room and share the URL with friends.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Real-time sync server configuration
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+The client connects to the Socket.IO server via the `NEXT_PUBLIC_SOCKET_URL` (and optional `NEXT_PUBLIC_SOCKET_PORT`) environment variables:
 
-## Learn More
+```bash
+# .env.local
+NEXT_PUBLIC_SOCKET_URL=http://your-domain.com:3001
+# NEXT_PUBLIC_SOCKET_PORT=3001 # optional helper if you just want to override the port
+```
 
-To learn more about Next.js, take a look at the following resources:
+- In local dev we automatically fall back to `http://localhost:3001`.
+- In production you **must** set the public URL that exposes your Socket.IO server; otherwise viewers on other devices will fail to sync and chat.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+After updating env values, restart `npm run dev` (or your process manager) so the client picks up the changes.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Project structure
 
-## Deploy on Vercel
+- `server.ts` – boots Next.js and a dedicated Socket.IO server with per-room state.
+- `src/components/VideoPlayer.tsx` – embeds the YouTube IFrame player and mirrors play/pause/seek/url events across sockets.
+- `src/components/ChatPanel.tsx` – text + voice chat panel synchronized through Socket.IO.
+- `src/hooks/useSocket.ts` – singleton client socket hook with environment-aware URL resolution.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Deployment notes
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
-"# Youtube-Watch-with-Friend" 
+To deploy, run the custom server (e.g. `NODE_ENV=production npm run build && node server.js`) on a host that can expose both the Next.js port (3000 by default) and the Socket.IO port (3001 by default). Update `NEXT_PUBLIC_SOCKET_URL` so browsers connect to your public socket endpoint.
