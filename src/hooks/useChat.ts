@@ -13,54 +13,56 @@ export type ChatMessage = {
 export function useChat(roomId: string) {
     const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [isConnected, setIsConnected] = useState(false);
-    const eventSourceRef = useRef<EventSource | null>(null);
+    const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+    const lastMessageIdRef = useRef<string | null>(null);
 
     useEffect(() => {
         if (!roomId) return;
 
-        // Load existing messages
-        fetch(`/api/chat?roomId=${roomId}`)
-            .then((res) => res.json())
-            .then((data) => {
-                if (data.messages) {
-                    setMessages(data.messages);
-                }
-            })
-            .catch(console.error);
+        setIsConnected(true);
 
-        // Connect to chat SSE endpoint
-        const eventSource = new EventSource(`/api/chat/events?roomId=${roomId}`);
-        eventSourceRef.current = eventSource;
-
-        eventSource.onopen = () => {
-            setIsConnected(true);
-        };
-
-        eventSource.onerror = () => {
-            setIsConnected(false);
-        };
-
-        eventSource.onmessage = (event) => {
+        // Polling function to check for new messages
+        const pollMessages = async () => {
             try {
-                const data = JSON.parse(event.data);
-                if (data.type === "connected") {
-                    return;
+                const response = await fetch(`/api/chat?roomId=${roomId}`);
+                if (!response.ok) {
+                    throw new Error("Failed to fetch messages");
                 }
-                setMessages((prev) => [...prev, data as ChatMessage]);
+
+                const data = await response.json();
+                if (data.messages && Array.isArray(data.messages)) {
+                    setMessages(data.messages);
+
+                    // Track the last message ID to know if there are new messages
+                    if (data.messages.length > 0) {
+                        lastMessageIdRef.current = data.messages[data.messages.length - 1].id;
+                    }
+                }
             } catch (err) {
-                console.error("Failed to parse chat message:", err);
+                console.error("Failed to fetch messages:", err);
+                setIsConnected(false);
             }
         };
 
+        // Initial load
+        pollMessages();
+
+        // Poll every 2 seconds for new messages
+        pollingIntervalRef.current = setInterval(pollMessages, 2000);
+
         return () => {
-            eventSource.close();
-            eventSourceRef.current = null;
+            if (pollingIntervalRef.current) {
+                clearInterval(pollingIntervalRef.current);
+            }
         };
     }, [roomId]);
 
     const sendMessage = useCallback(
         async (message: ChatMessage) => {
             try {
+                // Optimistically add message to UI
+                setMessages((prev) => [...prev, message]);
+
                 await fetch("/api/chat", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
@@ -68,6 +70,8 @@ export function useChat(roomId: string) {
                 });
             } catch (err) {
                 console.error("Failed to send message:", err);
+                // Remove optimistically added message on error
+                setMessages((prev) => prev.filter((m) => m.id !== message.id));
             }
         },
         [roomId]
@@ -75,4 +79,5 @@ export function useChat(roomId: string) {
 
     return { messages, isConnected, sendMessage };
 }
+
 

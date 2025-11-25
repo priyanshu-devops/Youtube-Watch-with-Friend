@@ -20,30 +20,30 @@ export async function GET(
                 new TextEncoder().encode(`data: ${JSON.stringify({ type: "connected" })}\n\n`)
             );
 
-            // Send current room state immediately if it exists
-            const roomState = rooms.get(roomId);
-            if (roomState && roomState.url) {
-                // Calculate current time if playing
-                let currentTime = roomState.time;
-                if (roomState.isPlaying) {
-                    const timeDiff = (Date.now() - roomState.lastUpdated) / 1000;
-                    currentTime += timeDiff;
-                }
-
-                // Send URL first
-                controller.enqueue(
-                    new TextEncoder().encode(
-                        `data: ${JSON.stringify({
-                            type: "url",
-                            url: roomState.url,
-                            time: 0,
-                        })}\n\n`
-                    )
-                );
-
-                // Then send play/pause state with current time
-                setTimeout(() => {
+            // Send current room state immediately if it exists (after a small delay to ensure client is ready)
+            const sendInitialState = () => {
+                const roomState = rooms.get(roomId);
+                if (roomState && roomState.url) {
                     try {
+                        // Calculate current time if playing
+                        let currentTime = roomState.time;
+                        if (roomState.isPlaying) {
+                            const timeDiff = (Date.now() - roomState.lastUpdated) / 1000;
+                            currentTime += timeDiff;
+                        }
+
+                        // Send URL with initial time
+                        controller.enqueue(
+                            new TextEncoder().encode(
+                                `data: ${JSON.stringify({
+                                    type: "url",
+                                    url: roomState.url,
+                                    time: currentTime,
+                                })}\n\n`
+                            )
+                        );
+
+                        // Send play/pause state
                         controller.enqueue(
                             new TextEncoder().encode(
                                 `data: ${JSON.stringify({
@@ -52,11 +52,14 @@ export async function GET(
                                 })}\n\n`
                             )
                         );
-                    } catch {
-                        // Client may have disconnected
+                    } catch (error) {
+                        console.error("Error sending initial state:", error);
                     }
-                }, 500);
-            }
+                }
+            };
+
+            // Send initial state after a brief delay
+            setTimeout(sendInitialState, 100);
 
             // Cleanup on close
             request.signal.addEventListener("abort", () => {
