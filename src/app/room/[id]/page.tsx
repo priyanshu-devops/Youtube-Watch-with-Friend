@@ -42,16 +42,20 @@ export default function RoomPage() {
 
     return (
         <div className="flex h-screen bg-black text-white overflow-hidden">
-            <div className="flex-1 flex flex-col">
-                <header className="p-4 border-b border-gray-800 flex justify-between items-center">
+            {/* Main Video Area */}
+            <div className="flex-1 flex flex-col min-w-0">
+                <header className="p-4 border-b border-gray-800 flex justify-between items-center bg-gray-900">
                     <h1 className="text-xl font-bold text-red-500">WatchParty</h1>
                     <div className="text-sm text-gray-400">Room: {roomId}</div>
                 </header>
-                <main className="flex-1 p-4 overflow-y-auto flex items-center justify-center">
+                <main className="flex-1 overflow-y-auto flex items-center justify-center bg-black">
                     <VideoPlayer roomId={roomId} />
                 </main>
             </div>
-            <ChatPanel roomId={roomId} username={username} />
+            {/* Chat Sidebar */}
+            <div className="flex-shrink-0">
+                <ChatPanel roomId={roomId} username={username} />
+            </div>
         </div>
     );
 }
