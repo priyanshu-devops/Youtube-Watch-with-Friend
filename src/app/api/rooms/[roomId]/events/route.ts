@@ -3,9 +3,9 @@ import { roomSubscribers } from "@/lib/room-state";
 
 export async function GET(
     request: NextRequest,
-    { params }: { params: { roomId: string } }
+    { params }: { params: Promise<{ roomId: string }> }
 ) {
-    const roomId = params.roomId;
+    const { roomId } = await params;
 
     const stream = new ReadableStream({
         start(controller) {

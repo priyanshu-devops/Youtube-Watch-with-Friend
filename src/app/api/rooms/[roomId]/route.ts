@@ -3,9 +3,9 @@ import { rooms, roomSubscribers } from "@/lib/room-state";
 
 export async function GET(
     request: NextRequest,
-    { params }: { params: { roomId: string } }
+    { params }: { params: Promise<{ roomId: string }> }
 ) {
-    const roomId = params.roomId;
+    const { roomId } = await params;
     const roomState = rooms.get(roomId);
 
     if (!roomState) {
@@ -32,9 +32,9 @@ export async function GET(
 
 export async function POST(
     request: NextRequest,
-    { params }: { params: { roomId: string } }
+    { params }: { params: Promise<{ roomId: string }> }
 ) {
-    const roomId = params.roomId;
+    const { roomId } = await params;
     const body = await request.json();
     const { type, time, url } = body;
 
