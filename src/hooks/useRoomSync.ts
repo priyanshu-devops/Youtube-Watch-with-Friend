@@ -22,18 +22,33 @@ export function useRoomSync(roomId: string) {
     const lastStateRef = useRef<RoomState | null>(null);
     const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
     const isFirstLoadRef = useRef(true);
+    const lastEmittedStateRef = useRef<{ type: string; time: number } | null>(null);
+    const ignoreNextStateChangeRef = useRef(false);
 
     const emitStateChange = useCallback(
         async (payload: VideoSyncPayload) => {
             try {
+                // Track what we're sending so we don't apply it back to ourselves
+                lastEmittedStateRef.current = {
+                    type: payload.type,
+                    time: payload.time ?? 0,
+                };
+                ignoreNextStateChangeRef.current = true;
+
                 await fetch(`/api/rooms/${roomId}`, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify(payload),
                 });
+
+                // Reset ignore flag after a short delay
+                setTimeout(() => {
+                    ignoreNextStateChangeRef.current = false;
+                }, 1500);
             } catch (err) {
                 console.error("Failed to emit state change:", err);
                 setError("Failed to sync");
+                ignoreNextStateChangeRef.current = false;
             }
         },
         [roomId]
@@ -82,9 +97,19 @@ export function useRoomSync(roomId: string) {
                     return;
                 }
 
+                // If we just emitted a change, skip processing this poll to avoid self-loop
+                if (ignoreNextStateChangeRef.current) {
+                    lastStateRef.current = roomState;
+                    return;
+                }
+
                 // Compare with last known state to detect changes
                 if (lastStateRef.current && syncCallbackRef.current) {
                     const lastState = lastStateRef.current;
+
+                    // Check if this state change is from our own action
+                    const isOurOwnChange = lastEmittedStateRef.current &&
+                        Math.abs(roomState.lastUpdated - Date.now()) < 2000;
 
                     // URL changed
                     if (roomState.url !== lastState.url) {
@@ -95,24 +120,31 @@ export function useRoomSync(roomId: string) {
                         });
                     }
 
-                    // Play state changed
+                    // Play state changed (only if not our own change)
                     if (roomState.isPlaying !== lastState.isPlaying) {
-                        syncCallbackRef.current({
-                            type: roomState.isPlaying ? "play" : "pause",
-                            time: roomState.time,
-                        });
+                        if (!isOurOwnChange ||
+                            (lastEmittedStateRef.current &&
+                                lastEmittedStateRef.current.type !== (roomState.isPlaying ? "play" : "pause"))) {
+                            syncCallbackRef.current({
+                                type: roomState.isPlaying ? "play" : "pause",
+                                time: roomState.time,
+                            });
+                        }
                     }
 
-                    // Time jumped (seek)
+                    // Time jumped (seek) - only if not our own seek
                     const timeDiff = Math.abs(roomState.time - lastState.time);
                     const expectedDiff = roomState.isPlaying ?
                         (roomState.lastUpdated - lastState.lastUpdated) / 1000 : 0;
 
                     if (timeDiff > 2 && Math.abs(timeDiff - expectedDiff) > 1) {
-                        syncCallbackRef.current({
-                            type: "seek",
-                            time: roomState.time,
-                        });
+                        if (!isOurOwnChange ||
+                            (lastEmittedStateRef.current && lastEmittedStateRef.current.type !== "seek")) {
+                            syncCallbackRef.current({
+                                type: "seek",
+                                time: roomState.time,
+                            });
+                        }
                     }
                 }
 
@@ -144,5 +176,4 @@ export function useRoomSync(roomId: string) {
 
     return { isConnected, error, emitStateChange, onSync };
 }
-
 
