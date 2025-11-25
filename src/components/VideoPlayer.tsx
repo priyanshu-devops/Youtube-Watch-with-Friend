@@ -202,12 +202,6 @@ export default function VideoPlayer({ roomId, initialVideoId }: VideoPlayerProps
             events: {
                 onReady: () => {
                     setPlayerReady(true);
-                    if (currentVideoId) {
-                        const playerInstance = playerRef.current;
-                        if (playerInstance && typeof playerInstance.cueVideoById === "function") {
-                            playerInstance.cueVideoById({ videoId: currentVideoId });
-                        }
-                    }
                 },
                 onStateChange: handlePlayerStateChange,
                 onError: (evt) => {
@@ -234,8 +228,12 @@ export default function VideoPlayer({ roomId, initialVideoId }: VideoPlayerProps
     useEffect(() => {
         const player = playerRef.current;
         if (!playerReady || !player || !currentVideoId) return;
-        if (typeof player.cueVideoById !== "function") return;
-        player.cueVideoById({ videoId: currentVideoId });
+
+        // Use loadVideoById to immediately load and cue the video
+        if (typeof player.loadVideoById === "function") {
+            console.log("Loading video:", currentVideoId);
+            player.loadVideoById({ videoId: currentVideoId, startSeconds: 0 });
+        }
     }, [playerReady, currentVideoId]);
 
     const applySyncPayload = useCallback(
@@ -275,27 +273,36 @@ export default function VideoPlayer({ roomId, initialVideoId }: VideoPlayerProps
         onSync((data: VideoSyncPayload) => {
             console.log("Received sync:", data);
 
+            // Handle URL changes
             if (data.url) {
-                setInputUrl(data.url);
-                const id = extractVideoId(data.url);
+                const normalizedUrl = normalizeUrl(data.url);
+                setInputUrl(normalizedUrl);
+                const id = extractVideoId(normalizedUrl);
                 if (id) {
+                    console.log("Setting video ID from sync:", id);
                     setCurrentVideoId(id);
+                    // If player is ready, load the video immediately
+                    if (playerRef.current && playerReady && typeof playerRef.current.loadVideoById === "function") {
+                        playerRef.current.loadVideoById({ videoId: id, startSeconds: data.time ?? 0 });
+                    }
                 } else {
                     setError("Received invalid YouTube URL.");
                 }
             }
 
-            if (playerRef.current) {
+            // Handle playback controls
+            if (playerRef.current && (data.type === "play" || data.type === "pause" || data.type === "seek")) {
                 isRemoteUpdate.current = true;
                 applySyncPayload(data);
                 setTimeout(() => {
                     isRemoteUpdate.current = false;
                 }, 500);
-            } else {
+            } else if (data.type !== "url") {
+                // Store pending sync for when player becomes ready
                 pendingSyncRef.current = data;
             }
         });
-    }, [onSync, applySyncPayload]);
+    }, [onSync, applySyncPayload, playerReady]);
 
     useEffect(() => {
         if (!playerReady || !pendingSyncRef.current) return;

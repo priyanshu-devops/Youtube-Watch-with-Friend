@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { roomSubscribers } from "@/lib/room-state";
+import { roomSubscribers, rooms } from "@/lib/room-state";
 
 export async function GET(
     request: NextRequest,
@@ -19,6 +19,44 @@ export async function GET(
             controller.enqueue(
                 new TextEncoder().encode(`data: ${JSON.stringify({ type: "connected" })}\n\n`)
             );
+
+            // Send current room state immediately if it exists
+            const roomState = rooms.get(roomId);
+            if (roomState && roomState.url) {
+                // Calculate current time if playing
+                let currentTime = roomState.time;
+                if (roomState.isPlaying) {
+                    const timeDiff = (Date.now() - roomState.lastUpdated) / 1000;
+                    currentTime += timeDiff;
+                }
+
+                // Send URL first
+                controller.enqueue(
+                    new TextEncoder().encode(
+                        `data: ${JSON.stringify({
+                            type: "url",
+                            url: roomState.url,
+                            time: 0,
+                        })}\n\n`
+                    )
+                );
+
+                // Then send play/pause state with current time
+                setTimeout(() => {
+                    try {
+                        controller.enqueue(
+                            new TextEncoder().encode(
+                                `data: ${JSON.stringify({
+                                    type: roomState.isPlaying ? "play" : "pause",
+                                    time: currentTime,
+                                })}\n\n`
+                            )
+                        );
+                    } catch {
+                        // Client may have disconnected
+                    }
+                }, 500);
+            }
 
             // Cleanup on close
             request.signal.addEventListener("abort", () => {
