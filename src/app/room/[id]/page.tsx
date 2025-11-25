@@ -1,23 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useParams } from "next/navigation";
 import VideoPlayer from "@/components/VideoPlayer";
 import ChatPanel from "@/components/ChatPanel";
-import { useSocket } from "@/hooks/useSocket";
 
 export default function RoomPage() {
     const params = useParams();
     const roomId = params.id as string;
-    const { socket } = useSocket();
     const [username, setUsername] = useState("");
     const [joined, setJoined] = useState(false);
-
-    useEffect(() => {
-        if (socket && joined) {
-            socket.emit("join-room", roomId);
-        }
-    }, [socket, roomId, joined]);
 
     if (!joined) {
         return (

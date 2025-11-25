@@ -1,40 +1,49 @@
 ## WatchParty – YouTube sync & chat
 
-This app lets friends watch any YouTube URL together with synchronized playback, chat and voice notes. It is built with Next.js (App Router), a custom Node/Socket.IO server, Tailwind and the YouTube IFrame API.
+This app lets friends watch any YouTube URL together with synchronized playback, chat and voice notes. Built with Next.js (App Router), Server-Sent Events (SSE), Tailwind and the YouTube IFrame API.
+
+## ✨ Features
+
+- ✅ **100% Vercel-compatible** - No separate server needed!
+- ✅ Real-time video synchronization
+- ✅ Live chat with text and voice messages
+- ✅ Works on any device
 
 ## Getting started (development)
 
 ```bash
 npm install
-
-# start Next.js on :3000 and the Socket.IO server on :3001
 npm run dev
 ```
 
 Visit `http://localhost:3000`, create a room and share the URL with friends.
 
-## Real-time sync server configuration
-
-The client connects to the Socket.IO server via the `NEXT_PUBLIC_SOCKET_URL` (and optional `NEXT_PUBLIC_SOCKET_PORT`) environment variables:
-
-```bash
-# .env.local
-NEXT_PUBLIC_SOCKET_URL=http://your-domain.com:3001
-# NEXT_PUBLIC_SOCKET_PORT=3001 # optional helper if you just want to override the port
-```
-
-- In local dev we automatically fall back to `http://localhost:3001`.
-- In production you **must** set the public URL that exposes your Socket.IO server; otherwise viewers on other devices will fail to sync and chat.
-
-After updating env values, restart `npm run dev` (or your process manager) so the client picks up the changes.
-
 ## Project structure
 
-- `server.ts` – boots Next.js and a dedicated Socket.IO server with per-room state.
-- `src/components/VideoPlayer.tsx` – embeds the YouTube IFrame player and mirrors play/pause/seek/url events across sockets.
-- `src/components/ChatPanel.tsx` – text + voice chat panel synchronized through Socket.IO.
-- `src/hooks/useSocket.ts` – singleton client socket hook with environment-aware URL resolution.
+- `src/app/api/` – Serverless API routes for room state and chat
+- `src/components/VideoPlayer.tsx` – YouTube player with real-time sync
+- `src/components/ChatPanel.tsx` – Chat interface with text/voice messages
+- `src/hooks/useRoomSync.ts` – SSE-based room synchronization hook
+- `src/hooks/useChat.ts` – SSE-based chat hook
 
-## Deployment notes
+## Deployment
 
-To deploy, run the custom server (e.g. `NODE_ENV=production npm run build && node server.js`) on a host that can expose both the Next.js port (3000 by default) and the Socket.IO port (3001 by default). Update `NEXT_PUBLIC_SOCKET_URL` so browsers connect to your public socket endpoint.
+### 🚀 Deploy to Vercel (Recommended)
+
+**It just works!** No configuration needed.
+
+1. Push to GitHub
+2. Import to Vercel
+3. Deploy
+
+See [VERCEL_DEPLOYMENT.md](./VERCEL_DEPLOYMENT.md) for details.
+
+### 📝 Notes
+
+- Uses Server-Sent Events (SSE) instead of WebSockets - fully compatible with Vercel
+- Room state and messages stored in-memory (per serverless function instance)
+- For production scale, consider adding Vercel KV for persistence
+
+### 🔧 Legacy: Separate Socket Server
+
+If you need WebSocket support, see [DEPLOYMENT.md](./DEPLOYMENT.md) for deploying the Socket.IO server separately.

@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { useSocket } from "@/hooks/useSocket";
+import { useRoomSync } from "@/hooks/useRoomSync";
 import { Play, Pause } from "lucide-react";
 
 interface VideoPlayerProps {
@@ -15,7 +15,6 @@ type VideoSyncPayload = {
     url?: string;
 };
 
-type VideoStateChangePayload = VideoSyncPayload & { roomId: string };
 
 type YouTubePlayer = {
     playVideo: () => void;
@@ -118,7 +117,7 @@ const extractVideoId = (input: string): string | null => {
 const initialUrlFromId = (videoId?: string) => (videoId ? `https://www.youtube.com/watch?v=${videoId}` : "");
 
 export default function VideoPlayer({ roomId, initialVideoId }: VideoPlayerProps) {
-    const { socket, isConnected, transport, error: socketError } = useSocket();
+    const { isConnected, error: syncError, emitStateChange, onSync } = useRoomSync(roomId);
     const [inputUrl, setInputUrl] = useState(() => initialUrlFromId(initialVideoId));
     const [currentVideoId, setCurrentVideoId] = useState<string | null>(initialVideoId ?? null);
     const [scriptReady, setScriptReady] = useState(false);
@@ -133,13 +132,6 @@ export default function VideoPlayer({ roomId, initialVideoId }: VideoPlayerProps
     const pendingSyncRef = useRef<VideoSyncPayload | null>(null);
 
     const getCurrentTime = () => playerRef.current?.getCurrentTime?.() ?? 0;
-
-    const emitStateChange = useCallback(
-        (payload: VideoStateChangePayload) => {
-            socket?.emit("video-state-change", payload);
-        },
-        [socket]
-    );
 
     useEffect(() => {
         if (typeof window === "undefined") return;
@@ -185,15 +177,15 @@ export default function VideoPlayer({ roomId, initialVideoId }: VideoPlayerProps
 
             if (event.data === PLAYER_STATES.PLAYING) {
                 if (!isRemoteUpdate.current) {
-                    emitStateChange({ roomId, type: "play", time: currentTime });
+                    emitStateChange({ type: "play", time: currentTime });
                 }
             } else if (event.data === PLAYER_STATES.PAUSED || event.data === PLAYER_STATES.ENDED) {
                 if (!isRemoteUpdate.current) {
-                    emitStateChange({ roomId, type: "pause", time: currentTime });
+                    emitStateChange({ type: "pause", time: currentTime });
                 }
             }
         },
-        [emitStateChange, roomId]
+        [emitStateChange]
     );
 
     useEffect(() => {
@@ -280,9 +272,7 @@ export default function VideoPlayer({ roomId, initialVideoId }: VideoPlayerProps
     );
 
     useEffect(() => {
-        if (!socket) return;
-
-        const handler = (data: VideoSyncPayload) => {
+        onSync((data: VideoSyncPayload) => {
             console.log("Received sync:", data);
 
             if (data.url) {
@@ -304,13 +294,8 @@ export default function VideoPlayer({ roomId, initialVideoId }: VideoPlayerProps
             } else {
                 pendingSyncRef.current = data;
             }
-        };
-
-        socket.on("video-state-sync", handler);
-        return () => {
-            socket.off("video-state-sync", handler);
-        };
-    }, [socket, applySyncPayload]);
+        });
+    }, [onSync, applySyncPayload]);
 
     useEffect(() => {
         if (!playerReady || !pendingSyncRef.current) return;
@@ -330,7 +315,7 @@ export default function VideoPlayer({ roomId, initialVideoId }: VideoPlayerProps
             const current = getCurrentTime();
             const last = lastPlayedRef.current;
             if (!isRemoteUpdate.current && !isSeekingRef.current && Math.abs(current - last) > 2) {
-                emitStateChange({ roomId, type: "seek", time: current });
+                emitStateChange({ type: "seek", time: current });
             }
             lastPlayedRef.current = current;
         }, 1000);
@@ -376,7 +361,6 @@ export default function VideoPlayer({ roomId, initialVideoId }: VideoPlayerProps
             playerRef.current.loadVideoById({ videoId });
         }
         emitStateChange({
-            roomId,
             type: "url",
             url: normalizedUrl,
             time: 0,
@@ -438,9 +422,9 @@ export default function VideoPlayer({ roomId, initialVideoId }: VideoPlayerProps
 
             <div className="text-sm text-gray-400 text-center">
                 {isConnected
-                    ? `Connected to Sync Server (${transport})`
-                    : socketError
-                        ? `Connection Error: ${socketError}`
+                    ? "Connected to Sync Server"
+                    : syncError
+                        ? `Connection Error: ${syncError}`
                         : "Connecting..."}
             </div>
         </div>

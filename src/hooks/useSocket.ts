@@ -64,7 +64,12 @@ export const useSocket = () => {
 
         const onConnectError = (err: Error) => {
             console.error("Socket connection error:", err);
-            setError(err.message);
+            const errorMsg = err.message || "websocket error";
+            if (errorMsg.includes("websocket") || errorMsg.includes("ECONNREFUSED") || errorMsg.includes("Failed to fetch")) {
+                setError("Unable to connect to sync server. Please check if the server is running.");
+            } else {
+                setError(errorMsg);
+            }
         };
 
         if (activeSocket.connected) {

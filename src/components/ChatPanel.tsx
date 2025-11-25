@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState, useRef } from "react";
-import { useSocket } from "@/hooks/useSocket";
+import { useChat, type ChatMessage } from "@/hooks/useChat";
 import { Send, Mic, Smile } from "lucide-react";
 
 interface ChatPanelProps {
@@ -9,17 +9,8 @@ interface ChatPanelProps {
     username: string;
 }
 
-interface Message {
-    id: string;
-    sender: string;
-    text?: string;
-    audio?: string; // base64
-    timestamp: number;
-}
-
 export default function ChatPanel({ roomId, username }: ChatPanelProps) {
-    const { socket } = useSocket();
-    const [messages, setMessages] = useState<Message[]>([]);
+    const { messages, sendMessage: sendChatMessage } = useChat(roomId);
     const [input, setInput] = useState("");
     const [isRecording, setIsRecording] = useState(false);
     const [showEmoji, setShowEmoji] = useState(false);
@@ -27,37 +18,18 @@ export default function ChatPanel({ roomId, username }: ChatPanelProps) {
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
-        if (!socket) return;
-
-        socket.on("chat-message-sync", (msg: Message) => {
-            setMessages((prev) => [...prev, msg]);
-        });
-
-        socket.on("voice-message-sync", (msg: Message) => {
-            setMessages((prev) => [...prev, msg]);
-        });
-
-        return () => {
-            socket.off("chat-message-sync");
-            socket.off("voice-message-sync");
-        };
-    }, [socket]);
-
-    useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     }, [messages]);
 
     const sendMessage = () => {
         if (!input.trim()) return;
-        const msg = {
+        const msg: ChatMessage = {
             id: Date.now().toString(),
             sender: username,
             text: input,
             timestamp: Date.now(),
-            roomId
         };
-        socket?.emit("chat-message", msg);
-        // Removed optimistic update to prevent double messages
+        sendChatMessage(msg);
         setInput("");
     };
 
@@ -78,15 +50,13 @@ export default function ChatPanel({ roomId, username }: ChatPanelProps) {
                 reader.readAsDataURL(blob);
                 reader.onloadend = () => {
                     const base64 = reader.result as string;
-                    const msg = {
+                    const msg: ChatMessage = {
                         id: Date.now().toString(),
                         sender: username,
                         audio: base64,
                         timestamp: Date.now(),
-                        roomId
                     };
-                    socket?.emit("voice-message", msg);
-                    // Removed optimistic update to prevent double messages
+                    sendChatMessage(msg);
                 };
             };
 
